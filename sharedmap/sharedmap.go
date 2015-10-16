@@ -1,35 +1,35 @@
+// Template SharedMap type
+
 package sharedmap
 
 import (
 	"sync"
 	"sync/atomic"
 	"unsafe"
-
-	"github.com/joeshaw/gengen/generic"
 )
 
-type Copiable interface {
-	copy() *Copiable
-}
+// template type SharedMap(KeyType, ValType)
+type KeyType string
+type ValType interface{}
 
 type SharedMap struct {
 	writeLock sync.Mutex
 	current   unsafe.Pointer
 }
 
-func newSharedMap() *SharedMap {
+func NewSharedMap() *SharedMap {
 	newMap := new(SharedMap)
-	underlyingMap := make(map[generic.T]generic.V)
+	underlyingMap := make(map[KeyType]ValType)
 	newMap.current = unsafe.Pointer(&underlyingMap)
 	return newMap
 }
 
-func (m *SharedMap) Get(key generic.T) (generic.V, bool) {
-	val, present := (*(*map[generic.T]generic.V)(m.current))[key]
+func (m *SharedMap) Get(key KeyType) (ValType, bool) {
+	val, present := (*(*map[KeyType]ValType)(m.current))[key]
 	return val, present
 }
 
-func (m *SharedMap) GetOrSet(key generic.T, valueMaker func() generic.V) (generic.V, bool) {
+func (m *SharedMap) GetOrSet(key KeyType, valueMaker func() ValType) (ValType, bool) {
 	m.writeLock.Lock()
 	defer m.writeLock.Unlock()
 	// Have to do .Get inside the lock incase another writer snuck the entry
@@ -45,19 +45,27 @@ func (m *SharedMap) GetOrSet(key generic.T, valueMaker func() generic.V) (generi
 	return newValue, true
 }
 
-func (m *SharedMap) Copy() *map[generic.T]generic.V {
-	current := (*(*map[generic.T]generic.V)(m.current))
-	newMap := make(map[generic.T]generic.V)
+func (m *SharedMap) Copy() *map[KeyType]ValType {
+	current := (*(*map[KeyType]ValType)(m.current))
+	newMap := make(map[KeyType]ValType)
 	for key, value := range current {
 		newMap[key] = value
 	}
 	return &newMap
 }
 
-func (m *SharedMap) SetValue(key generic.T, value generic.V) {
+func (m *SharedMap) SetValue(key KeyType, value ValType) {
 	m.writeLock.Lock()
 	defer m.writeLock.Unlock()
 	newCurrent := m.Copy()
 	(*newCurrent)[key] = value
 	atomic.StorePointer(&m.current, unsafe.Pointer(newCurrent))
+}
+
+func (m *SharedMap) Keys() []KeyType {
+	var keys []KeyType
+	for k := range (*map[KeyType]ValType)(m.current) {
+		keys = append(keys, k)
+	}
+	return keys
 }
